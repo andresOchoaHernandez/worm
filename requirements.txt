@@ -1,0 +1,7 @@
+requests
+paramiko
+scp
+netifaces
+ipcalc
+netaddr
+scapy
