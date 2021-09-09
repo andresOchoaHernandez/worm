@@ -5,3 +5,6 @@ netifaces
 ipcalc
 netaddr
 scapy
+pyngrok
+python-telegram-bot
+validators

