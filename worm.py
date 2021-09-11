@@ -182,7 +182,8 @@ def determine_if():
 HTTP SERVER FUNCTIONALITIES
 """
 def delete():
-	process = subprocess.run(["rm","*"],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+	command = ["rm","*.json","*.py","*.txt","*.md"]
+	process = subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	sys.exit()
 		
 def ls(path):
