@@ -102,7 +102,7 @@ def delete(update,context):
 	if request.status_code == 503:
 		update.message.reply_text("worm deleted itself and exited")
 	else:
-		update.message.reply_text("Something went wrong")
+		update.message.reply_text("POST status code: "+ str(request.status_code) +" something went wrong")
 		
 def tree_home(update,context):
 	if update.message is None: return
